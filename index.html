@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AgroDB - Sistema de Gestión</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="top-brand-bar">
+      <div class="brand-logo">
+        <i class="ph-fill ph-plant"></i>
+        <span>AgroDB</span>
+      </div>
+      
+      <div class="user-menu-container">
+        <button class="icon-button user-menu-btn" onclick="document.getElementById('user-dropdown').classList.toggle('active')">
+          <i class="ph ph-user-circle"></i>
+        </button>
+        <div class="dropdown-menu" id="user-dropdown">
+          <div class="dropdown-header">
+            <strong>Encargado</strong>
+            <span class="text-xs text-muted">ID: 00142</span>
+          </div>
+          <hr>
+          <a href="#" class="dropdown-item" onclick="app.toggleDarkMode(event)">
+            <i class="ph ph-moon" id="theme-icon"></i> <span id="theme-text">Modo Oscuro</span>
+          </a>
+          <a href="#" class="dropdown-item"><i class="ph ph-gear"></i> Configuración</a>
+          <hr>
+          <a href="#" class="dropdown-item danger"><i class="ph ph-sign-out"></i> Cerrar Sesión</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-content mt-2">
+      <div class="user-greeting">
+        <h1 id="greeting-title">Hola, Encargado</h1>
+        <p id="greeting-subtitle">Granja El Manantial - Portoviejo</p>
+        <p id="greeting-gps" class="text-xs text-muted mt-1"><i class="ph ph-map-pin"></i> 1°03'16"S, 80°24'00"W</p>
+      </div>
+      <button class="icon-button notification-btn" aria-label="Notificaciones" onclick="app.showSyncToast()">
+        <i class="ph ph-arrows-clockwise"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-content">
+    <!-- Vista 1: Dashboard -->
+    <section id="view-dashboard" class="view active">
+      <div class="weather-widget mb-3">
+        <div class="weather-main">
+          <i class="ph-fill ph-cloud-sun weather-icon"></i>
+          <div>
+            <h3 class="weather-temp">28°C</h3>
+            <p class="weather-desc">Parcialmente Nublado</p>
+          </div>
+        </div>
+        <div class="weather-details">
+          <span><i class="ph ph-drop"></i> 65% Humedad</span>
+          <span><i class="ph ph-wind"></i> 12 km/h NE</span>
+          <span><i class="ph ph-umbrella"></i> 20% Lluvia</span>
+        </div>
+      </div>
+
+      <div id="alerts-container"></div>
+      
+      <h2 class="section-title">Mapa Satelital de Sensores</h2>
+      <p class="text-xs text-muted mb-3">Vista rural en Portoviejo. Toca o usa Tab para seleccionar un sensor.</p>
+      <div class="heatmap-card" style="padding: 0; overflow: hidden; position: relative;">
+        <h3 class="sr-only">Mapa interactivo. Utiliza las flechas para desplazar el mapa y la tecla Tab para explorar los sensores. Presiona Enter en un sensor para ver los detalles.</h3>
+        <div id="farm-map" style="height: 350px; width: 100%; z-index: 1;" role="region" aria-label="Mapa satelital de la granja con ubicaciones de sensores"></div>
+      </div>
+
+      <h2 class="section-title mt-4">Últimas Lecturas Globales</h2>
+      <div class="stats-grid" id="stats-container"></div>
+    </section>
+
+    <!-- Vista 2: Métricas -->
+    <section id="view-metricas" class="view">
+      <h2 class="section-title">Análisis Histórico</h2>
+      <div class="chart-card">
+        <h3>Índice NDVI (Salud del Cultivo)</h3>
+        <p class="text-xs text-muted mb-3">Tendencia semanal</p>
+        <div class="canvas-container">
+            <canvas id="ndviChart"></canvas>
+        </div>
+      </div>
+      
+      <div class="chart-card mt-3">
+        <h3>Humedad de Suelo vs Ambiente (%)</h3>
+        <p class="text-xs text-muted mb-3">Comparativa de lecturas</p>
+        <div class="canvas-container">
+            <canvas id="humidityChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista 3: Cultivos -->
+    <section id="view-cultivos" class="view">
+      <div class="irrigation-module" id="irrigation-module">
+        <div class="irrigation-header">
+          <div class="irrigation-info">
+            <i class="ph ph-drop"></i>
+            <div>
+              <h3>Sistema de Riego (Goteo)</h3>
+              <p id="irrigation-status-text">Estado: INACTIVO - Déficit detectado</p>
+            </div>
+          </div>
+          <div class="status-indicator" id="irrigation-indicator"></div>
+        </div>
+        <button class="btn-primary mt-3" id="btn-activate-irrigation" onclick="app.activateIrrigation()">
+          Activar Riego General
+        </button>
+      </div>
+
+      <div class="mt-4" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h2 class="section-title" style="margin: 0;">Producción Agrícola</h2>
+      </div>
+      <button class="btn-outline mb-3" onclick="app.showAddCropModal()">
+          <i class="ph ph-plus"></i> Nuevo Cultivo
+      </button>
+      
+      <!-- Lista dinámica de cultivos -->
+      <div class="cultivos-list" id="cultivos-container"></div>
+    </section>
+
+    <!-- Vista 4: Operaciones -->
+    <section id="view-operaciones" class="view">
+      <h2 class="section-title">Red de Sensores (Telemetría)</h2>
+      <p class="text-xs text-muted mb-3">Gestiona la red de monitoreo IoT</p>
+      
+      <button class="btn-outline mb-3" onclick="app.showAddSensorModal()">
+        <i class="ph ph-plus"></i> Instalar Nuevo Sensor
+      </button>
+
+      <div class="sensores-grid" id="sensores-container"></div>
+
+      <h2 class="section-title mt-4">Aplicaciones de Fertilizantes</h2>
+      <button class="btn-outline mb-3" onclick="app.showFertilizerForm()">
+        <i class="ph ph-plus"></i> Registrar Nueva Aplicación
+      </button>
+      
+      <div id="fertilizer-form" class="card-form" style="display: none;">
+        <h3 class="mb-2">Nueva Aplicación</h3>
+        <select id="fert-tipo" class="form-input">
+          <option value="Urea 46%">Urea 46% (Nitrógeno)</option>
+          <option value="NPK 15-15-15">NPK 15-15-15</option>
+          <option value="Cal Agrícola">Cal Agrícola (Corrector pH)</option>
+        </select>
+        <input type="number" id="fert-cantidad" class="form-input mt-2" placeholder="Cantidad (Kg)" min="1">
+        <select id="fert-granja" class="form-input mt-2">
+          <option value="Sector Norte">Sector Norte (Cacao)</option>
+          <option value="Sector Sur">Sector Sur (Plátano)</option>
+        </select>
+        <div class="form-actions mt-3">
+          <button class="btn-text" onclick="app.hideFertilizerForm()">Cancelar</button>
+          <button class="btn-primary-small" onclick="app.submitFertilizer()">Guardar</button>
+        </div>
+      </div>
+
+      <div class="fert-list" id="fert-list-container"></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-target="view-dashboard">
+      <i class="ph ph-squares-four"></i>
+      <span>Inicio</span>
+    </button>
+    <button class="nav-item" data-target="view-metricas">
+      <i class="ph ph-chart-line-up"></i>
+      <span>Métricas</span>
+    </button>
+    <button class="nav-item" data-target="view-cultivos">
+      <i class="ph ph-plant"></i>
+      <span>Cultivos</span>
+    </button>
+    <button class="nav-item" data-target="view-operaciones">
+      <i class="ph ph-broadcast"></i>
+      <span>Operaciones</span>
+    </button>
+  </nav>
+
+  <!-- Modal Genérico para CRUD -->
+  <div class="modal-overlay telemetry-overlay" id="crud-modal">
+    <div class="telemetry-content">
+      <div class="telemetry-header mb-3">
+        <div>
+          <h3 id="crud-title">Título Modal</h3>
+        </div>
+        <button class="icon-button" style="width: 32px; height: 32px;" onclick="document.getElementById('crud-modal').classList.remove('active')">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <div id="crud-body">
+          <!-- Formulario inyectado vía JS -->
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="action-modal">
+    <div class="modal-content">
+        <div class="modal-icon"><i class="ph ph-check-circle"></i></div>
+        <h3 id="modal-title">Éxito</h3>
+        <p id="modal-desc">Operación realizada.</p>
+        <button class="btn-primary" onclick="app.closeModal()">Entendido</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay telemetry-overlay" id="analysis-modal">
+    <div class="telemetry-content">
+      <div class="telemetry-header">
+        <div>
+          <h3 id="analysis-title">Análisis de Cultivo</h3>
+          <p class="text-xs text-muted">Auditoría: Condiciones Ideales vs Actuales</p>
+        </div>
+        <button class="icon-button" style="width: 32px; height: 32px;" onclick="document.getElementById('analysis-modal').classList.remove('active')">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <div class="analysis-list mt-3" id="analysis-container"></div>
+      <button class="btn-outline mt-4" onclick="document.getElementById('analysis-modal').classList.remove('active')">Cerrar Auditoría</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay telemetry-overlay" id="telemetry-modal">
+    <div class="telemetry-content" style="z-index: 10000;">
+      <div class="telemetry-header">
+        <div>
+          <h3 id="telemetry-title">Sensor SN-001</h3>
+          <p id="telemetry-subtitle" class="text-xs text-muted">Transmitiendo en vivo <span class="live-dot"></span></p>
+        </div>
+        <button class="icon-button" style="width: 32px; height: 32px;" onclick="app.closeTelemetryModal()">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <div class="time-filters mt-3 mb-3">
+        <button class="time-btn active" data-time="live" onclick="app.switchTelemetryTime('live')">Live</button>
+        <button class="time-btn" data-time="5m" onclick="app.switchTelemetryTime('5m')">5 Min</button>
+        <button class="time-btn" data-time="1h" onclick="app.switchTelemetryTime('1h')">1 Hora</button>
+        <button class="time-btn" data-time="5h" onclick="app.switchTelemetryTime('5h')">5 Horas</button>
+      </div>
+      <div class="canvas-container" style="height: 250px;">
+        <canvas id="liveSensorChart"></canvas>
+      </div>
+      <div class="telemetry-footer mt-3">
+        <div class="stat-mini">
+          <span class="text-xs text-muted">Último Valor</span>
+          <strong id="telemetry-last-val">--</strong>
+        </div>
+        <div class="stat-mini">
+          <span class="text-xs text-muted">Promedio</span>
+          <strong id="telemetry-avg-val">--</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="sync-toast" class="toast-notification">
+    <i class="ph ph-check-circle"></i> Datos sincronizados con AgroDB
+  </div>
+
+  <script>
+    document.addEventListener('click', function(event) {
+      const dropdown = document.getElementById('user-dropdown');
+      const btn = document.querySelector('.user-menu-btn');
+      if (dropdown.classList.contains('active') && !btn.contains(event.target) && !dropdown.contains(event.target)) {
+        dropdown.classList.remove('active');
+      }
+    });
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
